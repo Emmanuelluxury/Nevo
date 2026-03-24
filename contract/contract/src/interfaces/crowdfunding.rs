@@ -167,7 +167,7 @@ pub trait CrowdfundingTrait {
 
     fn withdraw_platform_fees(
         env: Env,
-        admin: Address,
+        to: Address,
         amount: i128,
     ) -> Result<(), CrowdfundingError>;
 
