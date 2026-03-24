@@ -268,6 +268,7 @@ pub enum StorageKey {
     PlatformFees,
     GlobalTotalRaised,
     CampaignCancelled(BytesN<32>),
+    CampaignClaimed(BytesN<32>),
     EmergencyContact,
     CampaignFeeHistory(BytesN<32>),
     Blacklist(Address),
