@@ -88,8 +88,14 @@ fn test_create_event_stores_event_details_and_initializes_metrics() {
         assert_eq!(stored_details.id, id, "id mismatch");
         assert_eq!(stored_details.title, title, "title mismatch");
         assert_eq!(stored_details.creator, creator, "creator mismatch");
-        assert_eq!(stored_details.ticket_price, ticket_price, "ticket_price mismatch");
-        assert_eq!(stored_details.max_attendees, max_attendees, "max_attendees mismatch");
+        assert_eq!(
+            stored_details.ticket_price, ticket_price,
+            "ticket_price mismatch"
+        );
+        assert_eq!(
+            stored_details.max_attendees, max_attendees,
+            "max_attendees mismatch"
+        );
         assert_eq!(stored_details.deadline, deadline, "deadline mismatch");
         assert_eq!(stored_details.token, token, "token mismatch");
 
@@ -100,6 +106,9 @@ fn test_create_event_stores_event_details_and_initializes_metrics() {
             .get(&StorageKey::EventMetrics(id.clone()))
             .expect("EventMetrics should be stored");
 
-        assert_eq!(stored_metrics.tickets_sold, 0, "tickets_sold should be initialized to 0");
+        assert_eq!(
+            stored_metrics.tickets_sold, 0,
+            "tickets_sold should be initialized to 0"
+        );
     });
 }
