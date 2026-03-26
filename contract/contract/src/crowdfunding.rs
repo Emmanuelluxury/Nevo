@@ -337,7 +337,6 @@ impl CrowdfundingTrait for CrowdfundingContract {
         env.storage().instance().set(&user_ticket_key, &true);
 
         events::ticket_sold(&env, pool_id, buyer, price, event_amount, fee_amount);
-
         Ok((event_amount, fee_amount))
     }
 
