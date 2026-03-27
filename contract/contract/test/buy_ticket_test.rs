@@ -61,6 +61,8 @@ fn read_i128_storage(env: &Env, client: &CrowdfundingContractClient<'_>, key: &S
     env.as_contract(&client.address, || {
         env.storage().instance().get(key).unwrap_or(0)
     })
+}
+
 // ── full success ──────────────────────────────────────────────────────────────
 
 #[test]
@@ -121,10 +123,11 @@ fn test_buy_ticket_full_success() {
             "EventPlatformFees storage updated"
         );
 
-        let has_ticket: bool = storage
-            .get(&StorageKey::UserTicket(pool_id, buyer.clone()))
-            .unwrap_or(false);
-        assert!(has_ticket, "UserTicket storage set to true");
+        let fee_treasury_amount: i128 = storage.get(&StorageKey::EventFeeTreasury).unwrap_or(0);
+        assert_eq!(
+            fee_treasury_amount, fee_amount,
+            "EventFeeTreasury storage updated"
+        );
     });
 
     // 7. Assertions - Events
