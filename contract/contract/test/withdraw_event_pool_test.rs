@@ -82,7 +82,10 @@ fn test_withdraw_event_pool_double_withdrawal_prevented() {
     let recipient = Address::generate(&env);
 
     // First withdrawal succeeds
-    assert_eq!(client.try_withdraw_event_pool(&pool_id, &recipient), Ok(Ok(())));
+    assert_eq!(
+        client.try_withdraw_event_pool(&pool_id, &recipient),
+        Ok(Ok(()))
+    );
 
     // Second withdrawal is blocked — funds already drained
     assert_eq!(

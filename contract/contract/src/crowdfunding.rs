@@ -1811,11 +1811,7 @@ impl CrowdfundingTrait for CrowdfundingContract {
         Ok(())
     }
 
-    fn withdraw_event_pool(
-        env: Env,
-        pool_id: u64,
-        to: Address,
-    ) -> Result<(), CrowdfundingError> {
+    fn withdraw_event_pool(env: Env, pool_id: u64, to: Address) -> Result<(), CrowdfundingError> {
         // Pool must exist
         if !env.storage().instance().has(&StorageKey::Pool(pool_id)) {
             return Err(CrowdfundingError::PoolNotFound);
@@ -1823,7 +1819,12 @@ impl CrowdfundingTrait for CrowdfundingContract {
 
         // Prevent double withdrawal
         let drained_key = StorageKey::EventDrained(pool_id);
-        if env.storage().instance().get::<_, bool>(&drained_key).unwrap_or(false) {
+        if env
+            .storage()
+            .instance()
+            .get::<_, bool>(&drained_key)
+            .unwrap_or(false)
+        {
             return Err(CrowdfundingError::EventAlreadyDrained);
         }
 
