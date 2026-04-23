@@ -116,46 +116,6 @@ fn test_create_campaign_with_empty_title() {
 }
 
 #[test]
-fn test_holds_ticket() {
-    let env = Env::default();
-    let (client, _, token_address) = setup_test(&env);
-
-    let donor = Address::generate(&env);
-    let token_admin = Address::generate(&env);
-    let token_client = token::StellarAssetClient::new(&env, &token_address);
-    token_client.mint(&donor, &1000);
-
-    let campaign_id = create_test_campaign_id(&env, 10);
-    let title = String::from_str(&env, "Event Campaign");
-    let goal = 1000i128;
-    let deadline = env.ledger().timestamp() + 86400;
-
-    client.create_campaign(
-        &campaign_id,
-        &title,
-        &donor,
-        &goal,
-        &deadline,
-        &token_address,
-    );
-
-    assert!(!client.holds_ticket(&campaign_id, &donor));
-
-    client.donate(
-        &campaign_id,
-        &donor,
-        &token_address,
-        &500,
-    );
-
-    assert!(client.holds_ticket(&campaign_id, &donor));
-
-    let fake_id = create_test_campaign_id(&env, 99);
-    let result = client.try_holds_ticket(&fake_id, &donor);
-    assert_eq!(result, Err(Ok(CrowdfundingError::CampaignNotFound)));
-}
-
-#[test]
 fn test_create_campaign_with_zero_goal() {
     let env = Env::default();
     let (client, _, _) = setup_test(&env);

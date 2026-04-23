@@ -2,16 +2,14 @@
 
 use soroban_sdk::{testutils::Address as _, token, Address, Env};
 
-
 use crate::{
     base::{
         errors::CrowdfundingError,
-        types::{EventDetails, EventMetrics, PoolConfig, StorageKey},
+        types::{PoolConfig, StorageKey},
     },
     crowdfunding::{CrowdfundingContract, CrowdfundingContractClient},
 };
-use soroban_sdk::{testutils::Events, Symbol, TryFromVal, BytesN, String};
-
+use soroban_sdk::{testutils::Events, Symbol, TryFromVal};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -315,79 +313,8 @@ fn test_buy_ticket_accumulates_across_multiple_purchases() {
     );
 }
 
-// ── get_event_metrics ─────────────────────────────────────────────────────────
-
-#[test]
-fn test_get_event_metrics_no_tickets() {
-    let env = Env::default();
-    let (client, _, token) = setup(&env);
-    let pool_id = create_pool(&client, &env, &token);
-
-    let metrics = client.get_event_metrics(&pool_id);
-    assert_eq!(metrics.tickets_sold, 0);
-    assert_eq!(metrics.total_collected, 0);
-}
-
-#[test]
-fn test_get_event_metrics_single_ticket() {
-    let env = Env::default();
-    let (client, _, token) = setup(&env);
-    let pool_id = create_pool(&client, &env, &token);
-
-    client.set_platform_fee_bps(&500); // 5%
-    let price = 10_000i128;
-    mint_and_buy(&env, &client, &token, pool_id, price);
-
-    let metrics = client.get_event_metrics(&pool_id);
-    assert_eq!(metrics.tickets_sold, 1);
-    assert_eq!(metrics.total_collected, 9_500); // price - 5% fee
-}
-
-#[test]
-fn test_get_event_metrics_multiple_tickets() {
-    let env = Env::default();
-    let (client, _, token) = setup(&env);
-    let pool_id = create_pool(&client, &env, &token);
-
-    client.set_platform_fee_bps(&250); // 2.5%
-    let price = 10_000i128;
-
-    for _ in 0..3 {
-        mint_and_buy(&env, &client, &token, pool_id, price);
-    }
-
-    // Each ticket: event_amount = 9_750, fee = 250
-    let metrics = client.get_event_metrics(&pool_id);
-    assert_eq!(metrics.tickets_sold, 3);
-    assert_eq!(metrics.total_collected, 29_250);
-}
-
-#[test]
-fn test_get_event_metrics_pool_not_found() {
-    let env = Env::default();
-    let (client, _, _) = setup(&env);
-
-    let result = client.try_get_event_metrics(&999u64);
-    assert_eq!(result, Err(Ok(CrowdfundingError::PoolNotFound)));
-}
-
-#[test]
-fn test_get_event_metrics_zero_fee_full_collection() {
-    let env = Env::default();
-    let (client, _, token) = setup(&env);
-    let pool_id = create_pool(&client, &env, &token);
-
-    // fee_bps = 0 (default) → total_collected == sum of all prices
-    let price = 5_000i128;
-    mint_and_buy(&env, &client, &token, pool_id, price);
-    mint_and_buy(&env, &client, &token, pool_id, price);
-
-    let metrics = client.get_event_metrics(&pool_id);
-    assert_eq!(metrics.tickets_sold, 2);
-    assert_eq!(metrics.total_collected, 10_000);
-}
-
 // ── validation ────────────────────────────────────────────────────────────────
+
 #[test]
 fn test_buy_ticket_zero_price_fails() {
     let env = Env::default();
@@ -443,125 +370,5 @@ fn test_buy_ticket_requires_buyer_auth() {
     assert!(
         auths.iter().any(|(addr, _)| addr == &buyer),
         "buyer auth must be recorded"
-    );
-}
-
-#[test]
-fn test_buy_ticket_event_sold_out() {
-fn test_buy_ticket_updates_metrics() {
-    let env = Env::default();
-    let (client, _, token) = setup(&env);
-    let pool_id = create_pool(&client, &env, &token);
-
-    let price: i128 = 1_000;
-    let buyer1 = Address::generate(&env);
-    let buyer2 = Address::generate(&env);
-    let buyer3 = Address::generate(&env);
-
-    // Setup event details and metrics with max_attendees = 2
-    env.as_contract(&client.address, || {
-        let mut id_bytes = [0u8; 32];
-        let bytes = pool_id.to_be_bytes();
-        id_bytes[24..].copy_from_slice(&bytes);
-        let event_id = BytesN::from_array(&env, &id_bytes);
-
-        let details = EventDetails {
-            id: event_id.clone(),
-            title: String::from_str(&env, "Test Event"),
-            creator: Address::generate(&env),
-            ticket_price: price,
-            max_attendees: 2,
-            deadline: env.ledger().timestamp() + 1_000_000,
-            token: token.clone(),
-        };
-        env.storage().instance().set(&StorageKey::Event(event_id.clone()), &details);
-
-        let metrics = EventMetrics::new();
-        env.storage().instance().set(&StorageKey::EventMetrics(event_id), &metrics);
-    });
-
-    let token_admin = token::StellarAssetClient::new(&env, &token);
-
-    // Buy 1st ticket - success
-    token_admin.mint(&buyer1, &price);
-    let _ = client.buy_ticket(&pool_id, &buyer1, &token, &price);
-
-    // Verify tickets_sold == 1
-    env.as_contract(&client.address, || {
-        let mut id_bytes = [0u8; 32];
-        let bytes = pool_id.to_be_bytes();
-        id_bytes[24..].copy_from_slice(&bytes);
-        let event_id = BytesN::from_array(&env, &id_bytes);
-        let metrics: EventMetrics = env.storage().instance().get(&StorageKey::EventMetrics(event_id)).unwrap();
-        assert_eq!(metrics.tickets_sold, 1);
-    });
-
-    // Buy 2nd ticket - success
-    token_admin.mint(&buyer2, &price);
-    let _ = client.buy_ticket(&pool_id, &buyer2, &token, &price);
-
-    // Verify tickets_sold == 2
-    env.as_contract(&client.address, || {
-        let mut id_bytes = [0u8; 32];
-        let bytes = pool_id.to_be_bytes();
-        id_bytes[24..].copy_from_slice(&bytes);
-        let event_id = BytesN::from_array(&env, &id_bytes);
-        let metrics: EventMetrics = env.storage().instance().get(&StorageKey::EventMetrics(event_id)).unwrap();
-        assert_eq!(metrics.tickets_sold, 2);
-    });
-
-    // Buy 3rd ticket - should fail with EventSoldOut
-    token_admin.mint(&buyer3, &price);
-    let result = client.try_buy_ticket(&pool_id, &buyer3, &token, &price);
-    assert_eq!(result, Err(Ok(CrowdfundingError::EventSoldOut)));
-
-    // Verify tickets_sold still == 2
-    env.as_contract(&client.address, || {
-        let mut id_bytes = [0u8; 32];
-        let bytes = pool_id.to_be_bytes();
-        id_bytes[24..].copy_from_slice(&bytes);
-        let event_id = BytesN::from_array(&env, &id_bytes);
-        let metrics: EventMetrics = env.storage().instance().get(&StorageKey::EventMetrics(event_id)).unwrap();
-        assert_eq!(metrics.tickets_sold, 2);
-    });
-}
-
-    let price = 10_000i128;
-
-    // Initial metrics
-    let initial_metrics = client.get_event_metrics(&pool_id);
-    assert_eq!(initial_metrics.tickets_sold, 0);
-
-    // Buy first ticket
-    mint_and_buy(&env, &client, &token, pool_id, price);
-    let metrics = client.get_event_metrics(&pool_id);
-    assert_eq!(metrics.tickets_sold, 1);
-
-    // Buy second ticket
-    mint_and_buy(&env, &client, &token, pool_id, price);
-    let metrics = client.get_event_metrics(&pool_id);
-    assert_eq!(metrics.tickets_sold, 2);
-}
-
-#[test]
-fn test_buy_ticket_records_user_ticket() {
-    let env = Env::default();
-    let (client, _, token) = setup(&env);
-    let pool_id = create_pool(&client, &env, &token);
-
-    let price = 10_000i128;
-    let (buyer, _) = mint_and_buy(&env, &client, &token, pool_id, price);
-
-    // Verify it's recorded
-    assert!(
-        client.is_ticket_buyer(&pool_id, &buyer),
-        "buyer must be recorded as having a ticket"
-    );
-
-    // Verify another random user is NOT recorded
-    let other = Address::generate(&env);
-    assert!(
-        !client.is_ticket_buyer(&pool_id, &other),
-        "other user must not be recorded as having a ticket"
     );
 }

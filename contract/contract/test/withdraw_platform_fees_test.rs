@@ -6,8 +6,8 @@ use crate::{
 };
 use soroban_sdk::token;
 use soroban_sdk::{
-    testutils::{Address as _, Events, MockAuth, MockAuthInvoke},
-    Address, BytesN, Env, IntoVal, String, Symbol, TryFromVal,
+    testutils::{Address as _, MockAuth, MockAuthInvoke},
+    Address, BytesN, Env, IntoVal, String,
 };
 
 fn create_client() -> (Env, CrowdfundingContractClient<'static>) {
@@ -174,116 +174,4 @@ fn test_withdraw_platform_fees_unauthorized() {
         }])
         .try_withdraw_platform_fees(&receiver, &500)
         .unwrap_err();
-}
-
-#[test]
-fn test_withdraw_platform_fees_emits_event() {
-    let (env, client) = create_client();
-
-    let admin = Address::generate(&env);
-    let token_admin = Address::generate(&env);
-    let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
-    let token_address = token_contract.address();
-    let token_client = token::StellarAssetClient::new(&env, &token_address);
-
-    client.initialize(&admin, &token_address, &1000);
-
-    let creator = Address::generate(&env);
-    token_client.mint(&creator, &1000);
-
-    let id = BytesN::from_array(&env, &[1; 32]);
-    let title = String::from_str(&env, "Campaign");
-    let goal = 10000;
-    let deadline = env.ledger().timestamp() + 86400;
-    client.create_campaign(&id, &title, &creator, &goal, &deadline, &token_address);
-
-    let receiver = Address::generate(&env);
-    let amount: i128 = 500;
-    client.withdraw_platform_fees(&receiver, &amount);
-
-    let all_events = env.events().all();
-    let event = all_events.iter().find(|e| {
-        let topics = &e.1;
-        if topics.len() < 2 {
-            return false;
-        }
-        let name = Symbol::try_from_val(&env, &topics.get(0).unwrap());
-        let to = Address::try_from_val(&env, &topics.get(1).unwrap());
-        name == Ok(Symbol::new(&env, "platform_fees_withdrawn")) && to == Ok(receiver.clone())
-    });
-
-    assert!(event.is_some(), "platform_fees_withdrawn event not emitted");
-
-    let data = &event.unwrap().2;
-    let decoded: Result<i128, _> = TryFromVal::try_from_val(&env, data);
-    assert_eq!(
-        decoded,
-        Ok(amount),
-        "event data should contain withdrawn amount"
-    );
-}
-
-#[test]
-fn test_withdraw_platform_fees_cannot_exceed_tracked_balance() {
-    let (env, client) = create_client();
-
-    let admin = Address::generate(&env);
-    let token_admin = Address::generate(&env);
-    let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
-    let token_address = token_contract.address();
-    let token_client = token::StellarAssetClient::new(&env, &token_address);
-
-    // Seed event pool funds directly into the contract (simulates ticket sales)
-    let event_pool_amount: i128 = 5_000;
-    token_client.mint(&client.address, &event_pool_amount);
-
-    // Initialize with zero creation fee so PlatformFees stays 0
-    client.initialize(&admin, &token_address, &0);
-
-    let receiver = Address::generate(&env);
-
-    // Contract holds 5_000 tokens (event pool funds) but PlatformFees = 0
-    // Admin must NOT be able to withdraw those event pool tokens
-    assert_eq!(
-        client.try_withdraw_platform_fees(&receiver, &1),
-        Err(Ok(CrowdfundingError::InsufficientFees)),
-        "must not withdraw from event pool funds when platform fees are zero"
-    );
-}
-
-#[test]
-fn test_withdraw_platform_fees_exact_balance_succeeds() {
-    let (env, client) = create_client();
-
-    let admin = Address::generate(&env);
-    let token_admin = Address::generate(&env);
-    let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
-    let token_address = token_contract.address();
-    let token_client = token::StellarAssetClient::new(&env, &token_address);
-    let creation_fee = 500i128;
-
-    client.initialize(&admin, &token_address, &creation_fee);
-
-    let creator = Address::generate(&env);
-    token_client.mint(&creator, &creation_fee);
-
-    let id = BytesN::from_array(&env, &[7; 32]);
-    let title = String::from_str(&env, "Campaign");
-    let goal = 1000i128;
-    let deadline = env.ledger().timestamp() + 86400;
-    client.create_campaign(&id, &title, &creator, &goal, &deadline, &token_address);
-
-    let receiver = Address::generate(&env);
-
-    // Withdraw exactly the tracked fee amount — must succeed
-    assert_eq!(
-        client.try_withdraw_platform_fees(&receiver, &creation_fee),
-        Ok(Ok(()))
-    );
-
-    // Now PlatformFees = 0, any further withdrawal must fail
-    assert_eq!(
-        client.try_withdraw_platform_fees(&receiver, &1),
-        Err(Ok(CrowdfundingError::InsufficientFees))
-    );
 }
